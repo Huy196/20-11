@@ -84,7 +84,7 @@ const galaxyParameters = {
   outsideColor: new THREE.Color(0x48b8b8),
 };
 
-const defaultHeartImages = Array.from({ length: 2 }, (_, i) => `images/img${i + 1}.jpg`);
+const defaultHeartImages = Array.from({ length: 80 }, (_, i) => `images/img${i + 1}.jpg`);
 
 const heartImages = [
   ...(window.dataCCD?.data?.heartImages || []),
@@ -97,11 +97,11 @@ const numGroups = heartImages.length;
 // --- LOGIC DÙNG NỘI SUY ---
 
 // Mật độ điểm khi chỉ có 1 ảnh (cao nhất)
-const maxDensity = 50000;
+const maxDensity = 100000;
 // Mật độ điểm khi có 10 ảnh trở lên (thấp nhất)
-const minDensity = 2000;
+const minDensity = 5000;
 // Số lượng ảnh tối đa mà chúng ta quan tâm để điều chỉnh
-const maxGroupsForScale = 14;
+const maxGroupsForScale = 80;
 
 let pointsPerGroup;
 
@@ -114,6 +114,8 @@ if (numGroups <= 1) {
   pointsPerGroup = Math.floor(maxDensity * (1 - t) + minDensity * t);
 }
 
+pointsPerGroup = Math.max(pointsPerGroup, 20000);
+
 if (pointsPerGroup * numGroups > galaxyParameters.count) {
   pointsPerGroup = Math.floor(galaxyParameters.count / numGroups);
 }
@@ -124,19 +126,33 @@ const positions = new Float32Array(galaxyParameters.count * 3);
 const colors = new Float32Array(galaxyParameters.count * 3);
 
 
+// Khởi tạo mảng lưu các thông số mỗi điểm
+const angles = [];     // Góc hiện tại
+const radii = [];      // Bán kính mỗi điểm
+const offsetsX = [];   // Lệch ngẫu nhiên X
+const offsetsY = [];   // Lệch ngẫu nhiên Y
+const offsetsZ = [];   // Lệch ngẫu nhiên Z
+
 let pointIdx = 0;
 for (let i = 0; i < galaxyParameters.count; i++) {
   const radius = Math.pow(Math.random(), galaxyParameters.randomnessPower) * galaxyParameters.radius;
   const branchAngle = (i % galaxyParameters.arms) / galaxyParameters.arms * Math.PI * 2;
-  const spinAngle = radius * galaxyParameters.spin;
 
   const randomX = (Math.random() - 0.5) * galaxyParameters.randomness * radius;
-  const randomY = (Math.random() - 0.5) * galaxyParameters.randomness * radius * 1.2; // thay từ 0.5 lên 1.5
+  const randomY = (Math.random() - 0.5) * galaxyParameters.randomness * radius * 1.5;
   const randomZ = (Math.random() - 0.5) * galaxyParameters.randomness * radius;
-  const totalAngle = branchAngle + spinAngle;
 
   if (radius < 30 && Math.random() < 0.8) continue;
 
+  // Lưu thông số
+  angles.push(branchAngle);
+  radii.push(radius);
+  offsetsX.push(randomX);
+  offsetsY.push(randomY);
+  offsetsZ.push(randomZ);
+
+  // Tạo vị trí ban đầu
+  const totalAngle = branchAngle;
   const i3 = pointIdx * 3;
   positions[i3] = Math.cos(totalAngle) * radius + randomX;
   positions[i3 + 1] = randomY;
@@ -151,6 +167,19 @@ for (let i = 0; i < galaxyParameters.count; i++) {
 
   pointIdx++;
 }
+
+// Sau đó trong hàm animate (mỗi frame) bạn update như sau:
+// function animateGalaxy(deltaTime) {
+//   const speed = 0.000001; // tốc độ cực chậm
+//   for (let i = 0; i < angles.length; i++) {
+//     angles[i] += speed;
+//     positions[i * 3] = Math.cos(angles[i]) * radii[i] + offsetsX[i];
+//     positions[i * 3 + 1] = offsetsY[i];
+//     positions[i * 3 + 2] = Math.sin(angles[i]) * radii[i] + offsetsZ[i];
+//   }
+//   geometry.attributes.position.needsUpdate = true;
+// }
+
 
 const galaxyGeometry = new THREE.BufferGeometry();
 galaxyGeometry.setAttribute('position', new THREE.BufferAttribute(positions.slice(0, pointIdx * 3), 3));
@@ -667,8 +696,8 @@ function createTextRings() {
     // ---- Kết thúc logic phân tích font ----
 
     // ---- Tạo texture chữ động ----
-    const textureHeight = 150;
-    const fontSize = Math.max(130, 0.8 * textureHeight);
+    const textureHeight = 256;
+    const fontSize = Math.max(180, 0.8 * textureHeight);
 
     // Đo chiều rộng của text để lặp lại
     const tempCanvas = document.createElement('canvas');
@@ -677,8 +706,11 @@ function createTextRings() {
     let singleText = ringTexts[i % ringTexts.length];
     const separator = '   ';
     let repeatedTextSegment = singleText + separator;
-
     let segmentWidth = tempCtx.measureText(repeatedTextSegment).width;
+
+    // Tăng scale factor để nét hơn
+    const scaleFactor = 4; // càng cao càng nét nhưng nặng
+
     let textureWidthCircumference = 2 * Math.PI * ringRadius * 180; // Heuristic value
     let repeatCount = Math.ceil(textureWidthCircumference / segmentWidth);
 
@@ -707,7 +739,7 @@ function createTextRings() {
 
     // Hiệu ứng glow cho viền chữ
     ctx.shadowColor = '#e0b3ff';
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = 25;
     ctx.lineWidth = 7;
     ctx.strokeStyle = '#fff';
     ctx.strokeText(fullText, 0, textureHeight * 0.82); // căn dòng thấp hơn
@@ -721,6 +753,9 @@ function createTextRings() {
     const ringTexture = new THREE.CanvasTexture(textCanvas);
     ringTexture.wrapS = THREE.RepeatWrapping;
     ringTexture.repeat.x = finalTextureWidth / textureWidthCircumference;
+    ringTexture.needsUpdate = true;
+    ringTexture.minFilter = THREE.LinearFilter;
+    ringTexture.magFilter = THREE.LinearFilter;
     ringTexture.needsUpdate = true;
 
     const ringGeometry = new THREE.CylinderGeometry(ringRadius, ringRadius, 1, 128, 1, true);
@@ -743,7 +778,7 @@ function createTextRings() {
     ringGroup.userData = {
       ringRadius: ringRadius,
       angleOffset: 0.15 * Math.PI * 0.5,
-      speed: 0.002 + 0.00025, // Tốc độ quay
+      speed: 0.0000005,  // cực chậm
       tiltSpeed: 0, rollSpeed: 0, pitchSpeed: 0, // Tốc độ lắc
       tiltAmplitude: Math.PI / 3, rollAmplitude: Math.PI / 6, pitchAmplitude: Math.PI / 8, // Biên độ lắc
       tiltPhase: Math.PI * 2, rollPhase: Math.PI * 2, pitchPhase: Math.PI * 2, // Pha lắc
@@ -818,9 +853,8 @@ function animatePlanetSystem() {
 let galaxyAudio = null;
 
 function preloadGalaxyAudio() {
-  const audioSources = [
-    "AE THEM NHAC TUY NHA"
-  ];
+  const audioSources = ["./music/theme.mp3"];
+
 
   const randomIndex = Math.floor(Math.random() * audioSources.length);
   const selectedSrc = audioSources[randomIndex];
@@ -832,6 +866,13 @@ function preloadGalaxyAudio() {
   // Preload không autoplay
   galaxyAudio.preload = "auto";
 }
+
+preloadGalaxyAudio();
+
+document.body.addEventListener("click", () => {
+  playGalaxyAudio();
+});
+
 
 function playGalaxyAudio() {
   if (galaxyAudio) {
@@ -920,7 +961,7 @@ function createHintIcon() {
   hintIcon.position.set(1.5, 1.5, 15); // Tăng giá trị Z từ 12 lên 20
 
   hintIcon.scale.set(0.8, 0.8, 0.8);
-  hintIcon.lookAt(planet.position);
+  // hintIcon.lookAt(planet.position);
   hintIcon.userData.initialPosition = hintIcon.position.clone();
 }
 
@@ -935,8 +976,8 @@ function animateHintIcon(time) {
     hintIcon.visible = true;
 
     // Hiệu ứng "nhấn" tới lui
-    const tapFrequency = 2.5;
-    const tapAmplitude = 1.5;
+    const tapFrequency = 0.6;
+    const tapAmplitude = 1;
     const tapOffset = Math.sin(time * tapFrequency) * tapAmplitude;
 
     // Di chuyển icon tới lui theo hướng nó đang nhìn
@@ -992,6 +1033,11 @@ function animate() {
           obj.material.opacity = 1;
         }
         return;
+      }
+      if (obj.userData && obj.userData.speed !== undefined) {
+        // Giảm tốc độ quay cực chậm
+        const slowFactor = 0.000001; // càng nhỏ càng chậm
+        obj.rotation.y += obj.userData.speed * slowFactor;
       }
       if (obj.userData.isTextRing || (obj.parent && obj.parent.userData && obj.parent.userData.isTextRing)) {
         if (obj.material && obj.material.opacity !== undefined) {
@@ -1109,7 +1155,7 @@ function animate() {
   renderer.render(scene, camera);
 }
 function createHintText() {
-  const canvasSize = 512;
+  const canvasSize = 2048;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = canvasSize;
   const context = canvas.getContext('2d');
@@ -1133,6 +1179,9 @@ function createHintText() {
   context.fillStyle = 'white';
   context.fillText(text, canvasSize / 2, canvasSize / 2);
   const textTexture = new THREE.CanvasTexture(canvas);
+  textTexture.minFilter = THREE.LinearFilter; // hoặc THREE.LinearMipMapLinearFilter
+  textTexture.magFilter = THREE.LinearFilter;
+  textTexture.needsUpdate = true;
   textTexture.needsUpdate = true;
   const textMaterial = new THREE.MeshBasicMaterial({
     map: textTexture,
@@ -1171,8 +1220,8 @@ function startCameraAnimation() {
   let progress = 0;
 
   function animatePath() {
-    // progress += 0.001010;
-    progress += 0.0025;
+    progress += 0.0004010;
+    // progress += 0.0025;
     let newPos;
 
     if (progress < duration1) {
