@@ -11,8 +11,13 @@ camera.position.set(0, 20, 30);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// Cho ảnh siêu nét (tận dụng DPI của màn hình)
+renderer.setPixelRatio(window.devicePixelRatio);
+
+// Giữ màu sắc đúng
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+
 document.getElementById('container').appendChild(renderer.domElement);
 
 // ---- KHỞI TẠO CONTROLS ----
@@ -30,7 +35,7 @@ controls.rotateSpeed = 0.3;
 controls.update();
 
 // ---- HÀM TIỆN ÍCH TẠO HIỆU ỨNG GLOW ----
-function createGlowMaterial(color, size = 128, opacity = 0.55) {
+function createGlowMaterial(color, size = 1024, opacity = 0.55) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const context = canvas.getContext('2d');
@@ -41,6 +46,8 @@ function createGlowMaterial(color, size = 128, opacity = 0.55) {
   context.fillRect(0, 0, size, size);
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
   const material = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
@@ -138,9 +145,11 @@ for (let i = 0; i < galaxyParameters.count; i++) {
   const radius = Math.pow(Math.random(), galaxyParameters.randomnessPower) * galaxyParameters.radius;
   const branchAngle = (i % galaxyParameters.arms) / galaxyParameters.arms * Math.PI * 2;
 
-  const randomX = (Math.random() - 0.5) * galaxyParameters.randomness * radius;
-  const randomY = (Math.random() - 0.5) * galaxyParameters.randomness * radius * 1.5;
-  const randomZ = (Math.random() - 0.5) * galaxyParameters.randomness * radius;
+  const randomScale = 10; // tăng lên để các điểm “to ra”, trải rộng hơn
+
+  const randomX = (Math.random() - 0.5) * galaxyParameters.randomness * radius * randomScale;
+  const randomY = (Math.random() - 0.5) * galaxyParameters.randomness * radius * 1.5 * randomScale;
+  const randomZ = (Math.random() - 0.5) * galaxyParameters.randomness * radius * randomScale;
 
   if (radius < 30 && Math.random() < 0.8) continue;
 
@@ -301,6 +310,9 @@ for (let group = 0; group < numGroups; group++) {
     const randomX = (Math.random() - 0.5) * galaxyParameters.randomness * radius;
     const randomY = (Math.random() - 0.5) * galaxyParameters.randomness * radius * 0.5;
     const randomZ = (Math.random() - 0.5) * galaxyParameters.randomness * radius;
+
+
+
     const totalAngle = branchAngle + spinAngle;
 
     groupPositions[idx] = Math.cos(totalAngle) * radius + randomX;
@@ -357,10 +369,10 @@ for (let group = 0; group < numGroups; group++) {
 
     // Material khi ở gần
     const materialNear = new THREE.PointsMaterial({
-      size: 1.8,
+      size: 3.6,
       map: neonTexture,
       transparent: false,
-      alphaTest: 0.2,
+      alphaTest: 0.6,
       depthWrite: true,
       depthTest: true,
       blending: THREE.NormalBlending,
@@ -369,10 +381,10 @@ for (let group = 0; group < numGroups; group++) {
 
     // Material khi ở xa
     const materialFar = new THREE.PointsMaterial({
-      size: 1.8,
+      size: 3.6,
       map: neonTexture,
       transparent: true,
-      alphaTest: 0.2,
+      alphaTest: 0.6,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       vertexColors: true
@@ -711,6 +723,8 @@ function createTextRings() {
     // Tăng scale factor để nét hơn
     const scaleFactor = 4; // càng cao càng nét nhưng nặng
 
+    
+
     let textureWidthCircumference = 2 * Math.PI * ringRadius * 180; // Heuristic value
     let repeatCount = Math.ceil(textureWidthCircumference / segmentWidth);
 
@@ -732,31 +746,34 @@ function createTextRings() {
     const ctx = textCanvas.getContext('2d');
 
     ctx.clearRect(0, 0, textCanvas.width, textureHeight);
+
     ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-    ctx.fillStyle = 'white';
+    // ctx.fillStyle = 'white';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
 
     // Hiệu ứng glow cho viền chữ
     ctx.shadowColor = '#e0b3ff';
-    ctx.shadowBlur = 25;
-    ctx.lineWidth = 7;
+    ctx.shadowBlur = 12 * scaleFactor;
+    ctx.lineWidth = 7 * scaleFactor;
     ctx.strokeStyle = '#fff';
     ctx.strokeText(fullText, 0, textureHeight * 0.82); // căn dòng thấp hơn
 
     // Hiệu ứng glow cho phần fill
     ctx.shadowColor = '#ffb3de';
-    ctx.shadowBlur = 24;
+    ctx.shadowBlur =  12 * scaleFactor;
     ctx.fillStyle = '#fff';
     ctx.fillText(fullText, 0, textureHeight * 0.84);
 
     const ringTexture = new THREE.CanvasTexture(textCanvas);
     ringTexture.wrapS = THREE.RepeatWrapping;
     ringTexture.repeat.x = finalTextureWidth / textureWidthCircumference;
+    
     ringTexture.needsUpdate = true;
     ringTexture.minFilter = THREE.LinearFilter;
     ringTexture.magFilter = THREE.LinearFilter;
     ringTexture.needsUpdate = true;
+    ringTexture.generateMipmaps = false;
 
     const ringGeometry = new THREE.CylinderGeometry(ringRadius, ringRadius, 1, 128, 1, true);
 
